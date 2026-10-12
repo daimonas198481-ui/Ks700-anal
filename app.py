@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from scipy.interpolate import griddata
 
 st.set_page_config(page_title="KS-700 GPR - Professional Stratigraphy & Solid Volume Analyzer", layout="wide")
 
@@ -95,7 +94,6 @@ if uploaded_file is not None:
         st.plotly_chart(fig, use_container_width=True)
         
         st.subheader("📊 2D Κατακόρυφη Τομή (Cross-Section & Stratigraphy)")
-        # Create a 2D slice view across X and Z (averaging Y)
         slice_fig = go.Figure()
         
         # Add stratigraphy background layers simulation
