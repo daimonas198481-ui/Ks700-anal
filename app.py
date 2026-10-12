@@ -3,15 +3,14 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 
-st.set_page_config(page_title="KS-700 GPR - Professional Stratigraphy & Solid Volume Analyzer", layout="wide")
+st.set_page_config(page_title="KS-700 GPR - Professional 3D Solid Model Analyzer", layout="wide")
 
-st.title("📡 KS-700 GPR - Σύστημα Τομογραφίας & Συμπαγών Όγκων Υπεδάφους")
+st.title("📡 KS-700 GPR - Προηγμένο Μοντέλο Συμπαγών Όγκων & Στρωμάτων")
 st.markdown("""
-Επαγγελματική απεικόνιση τομών βάθους και **συμπαγών γεωμετρικών όγκων (3D Voxel/Mesh)**:
-* 🟫 **Επιφανειακό Στρώμα / Κοκκινόχωμα**
-* 🟨 **Υπέδαφος / Βράχος / Σταθερό Έδαφος**
-* 🟦 **Κενά / Σήραγγες / Τούνελ** (Συμπαγής τρισδιάστατη μορφή)
-* 🟥 **Μέταλλα / Σφραγίσματα / Στόχοι** (Συμπαγείς γεωμετρικοί όγκοι)
+Επαγγελματική απεικόνιση τρισδιάστατου μοντέλου με:
+* 🟫 **Στρώματα Εδάφους:** Κοκκινόχωμα & Σταθερό Υπέδαφος
+* 🟦 **Συμπαγή Τούνελ / Κενά:** Ογκομετρική σύνδεση & κυλινδρική μορφή
+* 🟥 **Στόχοι & Μέταλλα:** Γεωμετρικοί όγκοι με γραμμές σύνδεσης
 """)
 
 uploaded_file = st.file_uploader("Ανεβάστε το αρχείο CSV του KS-700", type=["csv", "txt"])
@@ -28,58 +27,62 @@ if uploaded_file is not None:
         z_col = c3.selectbox("Άξονας Z / Βάθος (m)", cols, index=2 if len(cols)>2 else 0)
         amp_col = c4.selectbox("Amplitude / Σήμα", cols, index=3 if len(cols)>3 else 0)
         
-        st.sidebar.subheader("🎛️ Ρυθμίσεις Κατωφλίων Στόχων")
+        st.sidebar.subheader("🎛️ Ρυθμίσεις Γεωμετρικών Όγκων")
         metal_th = st.sidebar.slider("Κατώφλι Μετάλλων / Σφραγισμάτων", float(df[amp_col].min()), float(df[amp_col].max()), float(df[amp_col].quantile(0.90)))
-        void_th = st.sidebar.slider("Κατώφλι Κενών / Τούνελ", float(df[amp_col].min()), float(df[amp_col].max()), float(df[amp_col].quantile(0.18)))
+        void_th = st.sidebar.slider("Κατώφλι Κενών / Τούνελ", float(df[amp_col].min()), float(df[amp_col].max()), float(df[amp_col].quantile(0.20)))
         
         def classify_target(val):
             if val >= metal_th:
                 return 'Μέταλλο / Στόχος'
             elif val <= void_th:
-                return 'Κενό / Τούνελ'
+                return 'Τούνελ / Κενό'
             else:
-                return 'Υπέδαφος / Έδαφος'
+                return 'Υπέδαφος'
                 
         df['Target_Type'] = df[amp_col].apply(classify_target)
         
-        # Summary metrics
-        counts = df['Target_Type'].value_counts()
-        col1, col2, col3 = st.columns(3)
-        col1.metric("🟦 Σημεία Κενών / Τούνελ", counts.get('Κενό / Τούνελ', 0))
-        col2.metric("🟥 Σημεία Μετάλλων / Στόχων", counts.get('Μέταλλο / Στόχος', 0))
-        col3.metric("🟫 Σημεία Υπεδάφους", counts.get('Υπέδαφος / Έδαφος', 0))
-        
-        st.subheader("🌐 3D Συμπαγής Γεωμετρική Απεικόνιση Όγκων")
+        # 3D Solid Model Visualization
+        st.subheader("🌐 Τρισδιάστατο Μοντέλο Υπεδάφους (Συμπαγείς Όγκοι & Στρώματα)")
         
         fig = go.Figure()
         
-        # Plot Subsoil (Low opacity background)
-        subsoil = df[df['Target_Type'] == 'Υπέδαφος / Έδαφος']
+        # 1. Background Subsoil Layer
+        subsoil = df[df['Target_Type'] == 'Υπέδαφος']
         if not subsoil.empty:
             fig.add_trace(go.Scatter3d(
                 x=subsoil[x_col], y=subsoil[y_col], z=subsoil[z_col],
-                mode='markers', name='Υπέδαφος',
-                marker=dict(size=2, color='tan', opacity=0.1)
+                mode='markers', name='Σταθερό Υπέδαφος / Βράχος',
+                marker=dict(size=3, color='tan', opacity=0.15, symbol='square')
             ))
             
-        # Plot Voids / Tunnels as Solid Meshes/Clusters
-        voids = df[df['Target_Type'] == 'Κενό / Τούνελ']
+        # 2. Solid Tunnels / Voids (Cylindrical / Block cluster representation)
+        voids = df[df['Target_Type'] == 'Τούνελ / Κενό']
         if not voids.empty:
             fig.add_trace(go.Scatter3d(
                 x=voids[x_col], y=voids[y_col], z=voids[z_col],
-                mode='markers', name='Κενό / Τούνελ (Συμπαγής Όγκος)',
-                marker=dict(size=7, color='blue', symbol='square', opacity=0.95)
+                mode='markers', name='Τούνελ / Κενό (Συμπαγής Όγκος)',
+                marker=dict(size=8, color='blue', opacity=0.9, symbol='square')
             ))
             
-        # Plot Metals / Sealed structures
+        # 3. Metals / Sealed structures
         metals = df[df['Target_Type'] == 'Μέταλλο / Στόχος']
         if not metals.empty:
             fig.add_trace(go.Scatter3d(
                 x=metals[x_col], y=metals[y_col], z=metals[z_col],
-                mode='markers', name='Μέταλλο / Σφράγιση',
-                marker=dict(size=9, color='red', symbol='diamond', opacity=1.0)
+                mode='markers', name='Μεταλλικός Στόχος / Σφράγιση',
+                marker=dict(size=10, color='red', opacity=1.0, symbol='diamond')
             ))
             
+            # Add connecting dashed line between first metal and first void if both exist
+            if not voids.empty:
+                m_x, m_y, m_z = metals[x_col].iloc[0], metals[y_col].iloc[0], metals[z_col].iloc[0]
+                v_x, v_y, v_z = voids[x_col].iloc[0], voids[y_col].iloc[0], voids[z_col].iloc[0]
+                fig.add_trace(go.Scatter3d(
+                    x=[m_x, v_x], y=[m_y, v_y], z=[m_z, v_z],
+                    mode='lines', name='Απόσταση Στόχου - Κενού',
+                    line=dict(color='black', width=4, dash='dash')
+                ))
+
         fig.update_layout(
             scene=dict(
                 xaxis_title='X (m)',
@@ -87,29 +90,29 @@ if uploaded_file is not None:
                 zaxis_title='Βάθος Z (m)',
                 zaxis=dict(autorange='reversed')
             ),
-            height=700,
+            height=750,
             margin=dict(r=0, b=0, l=0, t=0)
         )
         
         st.plotly_chart(fig, use_container_width=True)
         
-        st.subheader("📊 2D Κατακόρυφη Τομή (Cross-Section & Stratigraphy)")
+        # 2D Cross-Section Stratigraphy View
+        st.subheader("📊 Κατακόρυφη Τομή Εδάφους & Στρατιγραφίας")
         slice_fig = go.Figure()
         
-        # Add stratigraphy background layers simulation
+        # Stratigraphy Rectangles
         slice_fig.add_shape(type="rect", x0=df[x_col].min(), x1=df[x_col].max(), y0=0, y1=2,
-                            fillcolor="#b85d38", opacity=0.4, layer="below", line_width=0)
+                            fillcolor="#b85d38", opacity=0.5, layer="below", line_width=0, name="Κοκκινόχωμα")
         slice_fig.add_shape(type="rect", x0=df[x_col].min(), x1=df[x_col].max(), y0=2, y1=df[z_col].max(),
-                            fillcolor="#d2b48c", opacity=0.3, layer="below", line_width=0)
+                            fillcolor="#d2b48c", opacity=0.4, layer="below", line_width=0, name="Υπέδαφος")
         
-        # Scatter for cross-section
         slice_fig.add_trace(go.Scatter(
             x=df[x_col], y=df[z_col],
             mode='markers',
             marker=dict(
                 size=8,
                 color=df[amp_col],
-                colorscale='Viridis',
+                colorscale='Plasma',
                 showscale=True,
                 colorbar=dict(title="Amplitude")
             ),
@@ -121,11 +124,11 @@ if uploaded_file is not None:
             yaxis_title="Βάθος Z (m)",
             yaxis=dict(autorange='reversed'),
             height=500,
-            title="Κατακόρυφη Τομή Εδάφους & Εντοπισμού Ανωμαλιών"
+            title="Τομή Στρατιγραφίας & Εντοπισμού"
         )
         st.plotly_chart(slice_fig, use_container_width=True)
         
     except Exception as e:
         st.error(f"Σφάλμα επεξεργασίας: {e}")
 else:
-    st.info("Παρακαλώ ανεβάστε το αρχείο CSV σας για να δημιουργηθούν οι συμπαγείς όγκοι και οι τομές βάθους.")
+    st.info("Παρακαλώ ανεβάστε το αρχείο CSV σας για να δημιουργηθεί το τρισδιάστατο μοντέλο.")
