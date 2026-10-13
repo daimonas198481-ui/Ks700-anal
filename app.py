@@ -2,16 +2,14 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from scipy.interpolate import griddata
 
-st.set_page_config(page_title="KS-700 GPR - Voxler True 3D Solid Volume", layout="wide")
+st.set_page_config(page_title="KS-700 GPR - Voxler Solid 3D Analyzer", layout="wide")
 
-st.title("📡 KS-700 GPR - 3D True Voxel & Isosurface Grid (Voxler Engine)")
+st.title("📡 KS-700 GPR - 3D Ογκομετρική Ανάλυση Υπεδάφους")
 st.markdown("""
-Πραγματική ογκομετρική απεικόνιση υπεδάφους με ενιαία σύνδεση δεδομένων (Voxler Style):
-* 🟦 **Συμπαγή Κενά / Τούνελ:** Ενιαίοι τρισδιάστατοι όγκοι βάθους
-* 🟥 **Μεταλλικοί Στόχοι:** Σημεία υψηλής αντανάκλασης
-* 🟫 **Υπέδαφος:** Πλέγμα αναφοράς
+Επαγγελματική απεικόνιση 3D όγκων τύπου **Voxler**:
+* 🟦 **Συμπαγή Κενά / Τούνελ / Φρέατα**
+* 🟥 **Μεταλλικοί Στόχοι / Σφραγίσματα**
 """)
 
 uploaded_file = st.file_uploader("Ανεβάστε το αρχείο CSV του KS-700", type=["csv", "txt"])
@@ -19,7 +17,7 @@ uploaded_file = st.file_uploader("Ανεβάστε το αρχείο CSV του 
 if uploaded_file is not None:
     try:
         df = pd.read_csv(uploaded_file, sep=None, engine='python')
-        st.success("Το αρχείο CSV φορτώθηκε επιτυχώς!")
+        st.success("Το αρχείο φορτώθηκε επιτυχώς!")
         
         cols = df.columns.tolist()
         c1, c2, c3, c4 = st.columns(4)
@@ -28,59 +26,50 @@ if uploaded_file is not None:
         z_col = c3.selectbox("Άξονας Z / Βάθος (m)", cols, index=2 if len(cols)>2 else 0)
         amp_col = c4.selectbox("Amplitude / Σήμα", cols, index=3 if len(cols)>3 else 0)
         
-        st.sidebar.subheader("🎛️ Ρυθμίσεις 3D Voxel Grid")
-        metal_th = st.sidebar.slider("Κατώφλι Μετάλλων / Στόχων", float(df[amp_col].min()), float(df[amp_col].max()), float(df[amp_col].quantile(0.88)))
-        void_th = st.sidebar.slider("Κατώφλι Κενών / Τούνελ", float(df[amp_col].min()), float(df[amp_col].max()), float(df[amp_col].quantile(0.25)))
+        st.sidebar.subheader("🎛️ Ρυθμίσεις Κατωφλίων")
+        metal_th = st.sidebar.slider("Κατώφλι Μετάλλων (High Amplitude)", float(df[amp_col].min()), float(df[amp_col].max()), float(df[amp_col].quantile(0.85)))
+        void_th = st.sidebar.slider("Κατώφλι Κενών (Low Amplitude)", float(df[amp_col].min()), float(df[amp_col].max()), float(df[amp_col].quantile(0.30)))
         
-        # Δημιουργία πυκνού 3D πλέγματος (Interpolation για ενιαίους όγκους)
-        grid_res = st.sidebar.slider("Ανάλυση Πλέγματος (Grid Resolution)", 15, 40, 25)
+        def classify_target(val):
+            if val >= metal_th:
+                return 'Μέταλλο / Στόχος'
+            elif val <= void_th:
+                return 'Κενό / Τούνελ'
+            else:
+                return 'Υπέδαφος'
+                
+        df['Target_Type'] = df[amp_col].apply(classify_target)
         
-        xi = np.linspace(df[x_col].min(), df[x_col].max(), grid_res)
-        yi = np.linspace(df[y_col].min(), df[y_col].max(), grid_res)
-        zi = np.linspace(df[z_col].min(), df[z_col].max(), grid_res)
-        XI, YI, ZI = np.meshgrid(xi, yi, zi, indexing='ij')
-        
-        points = df[[x_col, y_col, z_col]].values
-        values = df[amp_col].values
-        
-        # Παρεμβολή τιμών στον ενδιάμεσο χώρο
-        VI = griddata(points, values, (XI, YI, ZI), method='linear', fill_value=np.nan)
-        
-        st.subheader("🌐 3D Ενιαίος Ογκομετρικός Σχηματισμός (Voxler Isosurface)")
+        # 3D Solid Voxel Model
+        st.subheader("🌐 3D Ογκομετρικό Μοντέλο (Voxler Style)")
         
         fig = go.Figure()
         
-        # 1. Εμφάνιση Κενών/Τούνελ ως συμπαγή ισοεπιφάνεια (Isosurface)
-        # Δημιουργούμε μάσκα για τα κενά
-        void_mask = (VI <= void_th) & (~np.isnan(VI))
-        if np.any(void_mask):
-            fig.add_trace(go.Isosurface(
-                x=XI[void_mask],
-                y=YI[void_mask],
-                z=ZI[void_mask],
-                value=VI[void_mask],
-                isomin=float(df[amp_col].min()),
-                isomax=float(void_th),
-                surface_count=3,
-                colorscale='Blues',
-                opacity=0.85,
-                name='Συμπαγές Κενό / Τούνελ'
+        # 1. Υπέδαφος (διαφανές πλέγμα)
+        subsoil = df[df['Target_Type'] == 'Υπέδαφος']
+        if not subsoil.empty:
+            fig.add_trace(go.Scatter3d(
+                x=subsoil[x_col], y=subsoil[y_col], z=subsoil[z_col],
+                mode='markers', name='Υπέδαφος',
+                marker=dict(size=2, color='tan', opacity=0.1, symbol='square')
             ))
             
-        # 2. Εμφάνιση Μετάλλων / Υψηλού σήματος
-        metal_mask = (VI >= metal_th) & (~np.isnan(VI))
-        if np.any(metal_mask):
-            fig.add_trace(go.Isosurface(
-                x=XI[metal_mask],
-                y=YI[metal_mask],
-                z=ZI[metal_mask],
-                value=VI[metal_mask],
-                isomin=float(metal_th),
-                isomax=float(df[amp_col].max()),
-                surface_count=2,
-                colorscale='Reds',
-                opacity=0.95,
-                name='Μεταλλικός Στόχος / Σφράγιση'
+        # 2. Κενά / Τούνελ (Συμπαγείς μπλε όγκοι)
+        voids = df[df['Target_Type'] == 'Κενό / Τούνελ']
+        if not voids.empty:
+            fig.add_trace(go.Scatter3d(
+                x=voids[x_col], y=voids[y_col], z=voids[z_col],
+                mode='markers', name='Κενό / Τούνελ (Συμπαγής Όγκος)',
+                marker=dict(size=7, color='blue', opacity=0.95, symbol='square')
+            ))
+            
+        # 3. Μεταλλικοί στόχοι (Κόκκινα διαμάντια)
+        metals = df[df['Target_Type'] == 'Μέταλλο / Στόχος']
+        if not metals.empty:
+            fig.add_trace(go.Scatter3d(
+                x=metals[x_col], y=metals[y_col], z=metals[z_col],
+                mode='markers', name='Μεταλλικός Στόχος',
+                marker=dict(size=9, color='red', opacity=1.0, symbol='diamond')
             ))
             
         fig.update_layout(
@@ -88,7 +77,7 @@ if uploaded_file is not None:
                 xaxis_title='X (m)',
                 yaxis_title='Y (m)',
                 zaxis_title='Βάθος Z (m)',
-                zaxis=dict(autorange='reversed') # Σωστή φορά βάθους GPR προς τα κάτω
+                zaxis=dict(autorange='reversed') # Σωστή φορά βάθους προς τα κάτω
             ),
             height=750,
             margin=dict(r=0, b=0, l=0, t=0)
@@ -96,8 +85,15 @@ if uploaded_file is not None:
         
         st.plotly_chart(fig, use_container_width=True)
         
+        # 2D Depth Slice
         st.subheader("📊 Κατακόρυφη Τομή & Στρωματογραφία")
         slice_fig = go.Figure()
+        
+        slice_fig.add_shape(type="rect", x0=df[x_col].min(), x1=df[x_col].max(), y0=0, y1=1.5,
+                            fillcolor="#b85d38", opacity=0.4, layer="below", line_width=0)
+        slice_fig.add_shape(type="rect", x0=df[x_col].min(), x1=df[x_col].max(), y0=1.5, y1=df[z_col].max(),
+                            fillcolor="#d2b48c", opacity=0.3, layer="below", line_width=0)
+        
         slice_fig.add_trace(go.Scatter(
             x=df[x_col], y=df[z_col],
             mode='markers',
@@ -108,8 +104,9 @@ if uploaded_file is not None:
                 showscale=True,
                 colorbar=dict(title="Amplitude")
             ),
-            text=df[amp_col]
+            text=df['Target_Type']
         ))
+        
         slice_fig.update_layout(
             xaxis_title="Οριζόντια Θέση X (m)",
             yaxis_title="Βάθος Z (m)",
